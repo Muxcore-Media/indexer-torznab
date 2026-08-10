@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <title>Prowlarr</title>
+    <item>
+      <title>Fight.Club.1999.1080p.BluRay.x264</title>
+      <guid>abc123</guid>
+      <link>https://example.test/details/abc123</link>
+      <comments>https://example.test/details/abc123</comments>
+      <pubDate>Mon, 01 Jan 2024 12:00:00 +0000</pubDate>
+      <enclosure url="magnet:?xt=urn:btih:DEADBEEF" length="8589934592" type="application/x-bittorrent" />
+      <torznab:attr name="seeders" value="42" />
+      <torznab:attr name="leechers" value="3" />
+      <torznab:attr name="size" value="8589934592" />
+      <torznab:attr name="category" value="2000" />
+      <torznab:attr name="imdb" value="0137523" />
+    </item>
+    <item>
+      <title>Fight Club 1999 720p</title>
+      <guid>def456</guid>
+      <link>https://example.test/details/def456</link>
+      <pubDate>Tue, 02 Jan 2024 12:00:00 +0000</pubDate>
+      <enclosure url="https://example.test/download/def456.torrent" length="2147483648" type="application/x-bittorrent" />
+      <torznab:attr name="seeders" value="15" />
+      <torznab:attr name="peers" value="20" />
+      <torznab:attr name="category" value="2000" />
+    </item>
+  </channel>
+</rss>
