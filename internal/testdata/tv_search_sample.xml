@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <title>Prowlarr</title>
+    <item>
+      <title>Example.Show.S01E02.1080p.WEB-DL</title>
+      <guid>tv-guid-1</guid>
+      <link>https://example.test/details/tv-guid-1</link>
+      <comments>https://example.test/details/tv-guid-1</comments>
+      <pubDate>Wed, 03 Jan 2024 12:00:00 +0000</pubDate>
+      <enclosure url="magnet:?xt=urn:btih:CAFEBABE" length="1500000000" type="application/x-bittorrent" />
+      <torznab:attr name="seeders" value="30" />
+      <torznab:attr name="leechers" value="2" />
+      <torznab:attr name="size" value="1500000000" />
+      <torznab:attr name="category" value="5000" />
+      <torznab:attr name="tvdbid" value="12345" />
+    </item>
+  </channel>
+</rss>
