@@ -10,8 +10,9 @@ MuxCore indexer that fans out through a **Torznab** (or Newznab) HTTP API — ty
 | `TORZNAB_API_KEY` | Upstream API key (`apikey` query param) |
 | `TORZNAB_GRPC_ADDR` | Module gRPC listen (default `:9486`) |
 | `TORZNAB_NAME` | Display name in results (default `Torznab`) |
+| `WG_CONF` | Required for **remote** Torznab URLs; HTTP is source-bound to the WG iface (same policy as piratebay / downloader). Loopback/empty URL OK without VPN. |
 
-When `TORZNAB_URL` is empty the module still registers on the mesh and returns empty search results (same soft pattern as `indexer-piratebay`).
+When `TORZNAB_URL` is empty the module still registers on the mesh (`indexer` capability) and returns empty search results (same soft pattern as `indexer-piratebay`).
 
 ## Multi-indexer ops
 

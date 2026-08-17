@@ -25,27 +25,32 @@ const (
 type Module struct {
 	indexerv1.UnimplementedIndexerServiceServer
 
-	mu       sync.RWMutex
-	api      searchAPI
-	baseURL  string
-	apiKey   string
-	name     string
-	id       string
-	grpcAddr string
-	grpcSrv  *grpc.Server
-	lis      net.Listener
-	http     *http.Client
+	mu           sync.RWMutex
+	api          searchAPI
+	baseURL      string
+	apiKey       string
+	name         string
+	id           string
+	grpcAddr     string
+	grpcSrv      *grpc.Server
+	lis          net.Listener
+	http         *http.Client
+	httpInjected bool
+	wgConfPath   string
+	vpnIface     string
 }
 
 type Config struct {
-	ID       string
-	GRPCAddr string
-	BaseURL  string
-	APIKey   string
-	Name     string
-	Timeout  time.Duration
-	HTTP     *http.Client
-	API      searchAPI
+	ID          string
+	GRPCAddr    string
+	BaseURL     string
+	APIKey      string
+	Name        string
+	Timeout     time.Duration
+	HTTP        *http.Client
+	API         searchAPI
+	WGConfPath  string
+	SkipVPNGate bool
 }
 
 func NewModule(cfg Config) *Module {
@@ -74,20 +79,34 @@ func NewModule(cfg Config) *Module {
 		cfg.Name = defaultIndexerName
 	}
 	cfg.BaseURL = normalizeAPIBase(cfg.BaseURL)
+	if cfg.WGConfPath == "" {
+		cfg.WGConfPath = strings.TrimSpace(os.Getenv("WG_CONF"))
+	}
 
+	httpInjected := cfg.HTTP != nil || cfg.SkipVPNGate
 	hc := cfg.HTTP
+	vpnIface := ""
+	if hc == nil && liveRemoteRequiresVPN(cfg.BaseURL, false) && !cfg.SkipVPNGate {
+		if bound, iface, err := newVPNBoundHTTPClient(cfg.WGConfPath, cfg.Timeout); err == nil {
+			hc = bound
+			vpnIface = iface
+		}
+	}
 	if hc == nil {
 		hc = &http.Client{Timeout: cfg.Timeout}
 	}
 
 	m := &Module{
-		id:       cfg.ID,
-		grpcAddr: cfg.GRPCAddr,
-		baseURL:  cfg.BaseURL,
-		apiKey:   cfg.APIKey,
-		name:     cfg.Name,
-		http:     hc,
-		api:      cfg.API,
+		id:           cfg.ID,
+		grpcAddr:     cfg.GRPCAddr,
+		baseURL:      cfg.BaseURL,
+		apiKey:       cfg.APIKey,
+		name:         cfg.Name,
+		http:         hc,
+		api:          cfg.API,
+		httpInjected: httpInjected,
+		wgConfPath:   cfg.WGConfPath,
+		vpnIface:     vpnIface,
 	}
 	if m.api == nil {
 		m.api = newTorznabClient(m.baseURL, m.apiKey, hc)
@@ -113,6 +132,18 @@ func (m *Module) Info() contracts.ModuleInfo {
 }
 
 func (m *Module) Init(ctx context.Context) error {
+	if err := enforceRemoteTorznabVPN(m.wgConfPath, m.baseURL, m.httpInjected); err != nil {
+		return err
+	}
+	if liveRemoteRequiresVPN(m.baseURL, m.httpInjected) && m.vpnIface == "" {
+		bound, iface, err := newVPNBoundHTTPClient(m.wgConfPath, 25*time.Second)
+		if err != nil {
+			return fmt.Errorf("vpn-bound HTTP client: %w", err)
+		}
+		m.http = bound
+		m.vpnIface = iface
+		m.api = newTorznabClient(m.baseURL, m.apiKey, bound)
+	}
 	lis, err := net.Listen("tcp", m.grpcAddr)
 	if err != nil {
 		return fmt.Errorf("listen gRPC %s: %w", m.grpcAddr, err)
@@ -124,6 +155,7 @@ func (m *Module) Init(ctx context.Context) error {
 	slog.Info("indexer-torznab initialized",
 		"grpc", m.grpcAddr,
 		"configured", m.configured(),
+		"vpn_iface", m.vpnIface,
 	)
 	return nil
 }
@@ -160,6 +192,14 @@ func (m *Module) Search(ctx context.Context, req *indexerv1.SearchRequest) (*ind
 	if !m.configured() {
 		slog.Debug("indexer-torznab: not configured (TORZNAB_URL empty), returning no results")
 		return &indexerv1.SearchResponse{}, nil
+	}
+	m.mu.RLock()
+	base := m.baseURL
+	injected := m.httpInjected
+	wg := m.wgConfPath
+	m.mu.RUnlock()
+	if err := enforceRemoteTorznabVPN(wg, base, injected); err != nil {
+		return nil, err
 	}
 	query := strings.TrimSpace(req.GetQuery())
 	if query == "" {
