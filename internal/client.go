@@ -227,13 +227,7 @@ func parseTorznabRSS(body []byte) ([]torznabHit, error) {
 				attrs[name] = a.Value
 			}
 		}
-		dl := strings.TrimSpace(attrs["magneturl"])
-		if dl == "" {
-			dl = strings.TrimSpace(it.Enclosure.URL)
-		}
-		if dl == "" {
-			dl = strings.TrimSpace(it.Link)
-		}
+		dl := preferMagnetDownload(attrs["magneturl"], it.Enclosure.URL, it.Link)
 		size := parseInt64(attrs["size"])
 		if size == 0 {
 			size = parseInt64(it.Enclosure.Length)
@@ -293,6 +287,23 @@ func parseInt64(s string) int64 {
 		return 0
 	}
 	return n
+}
+
+func preferMagnetDownload(candidates ...string) string {
+	var fallback string
+	for _, c := range candidates {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(c), "magnet:") {
+			return c
+		}
+		if fallback == "" {
+			fallback = c
+		}
+	}
+	return fallback
 }
 
 func parsePubDate(s string) time.Time {

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.3] — 2026-08-18
+
+### Fixed
+- Prefer a magnet in the item `link` (or enclosure) over an HTTP proxy download URL when `magneturl` is absent, so search hits still expose an infohash.
+
 ## [0.1.2] — 2026-08-18
 
 ### Fixed

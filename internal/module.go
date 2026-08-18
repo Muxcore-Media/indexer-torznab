@@ -144,7 +144,7 @@ func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
 		ID:           m.id,
 		Name:         "Torznab Indexer",
-		Version:      "0.1.2",
+		Version:      "0.1.3",
 		Roles:        []string{"indexer"},
 		Description:  "Aggregating indexer via Torznab/Newznab HTTP API (Prowlarr, Jackett)",
 		Author:       "MuxCore",
