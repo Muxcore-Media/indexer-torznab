@@ -227,9 +227,9 @@ func parseTorznabRSS(body []byte) ([]torznabHit, error) {
 				attrs[name] = a.Value
 			}
 		}
-		dl := strings.TrimSpace(it.Enclosure.URL)
+		dl := strings.TrimSpace(attrs["magneturl"])
 		if dl == "" {
-			dl = strings.TrimSpace(attrs["magneturl"])
+			dl = strings.TrimSpace(it.Enclosure.URL)
 		}
 		if dl == "" {
 			dl = strings.TrimSpace(it.Link)

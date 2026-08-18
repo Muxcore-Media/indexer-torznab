@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.2] — 2026-08-18
+
+### Fixed
+- Prefer Torznab `magneturl` over enclosure so search hits expose infohashes instead of opaque proxy download URLs.
+
 ## [0.1.1] — 2026-08-18
 
 ### Fixed
