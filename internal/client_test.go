@@ -43,6 +43,30 @@ func TestParseTorznabFixture(t *testing.T) {
 	}
 }
 
+func TestParseTorznabPrefersMagnetURL(t *testing.T) {
+	body := []byte(`<?xml version="1.0"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <item>
+      <title>Show.S01E01</title>
+      <enclosure url="http://127.0.0.1:9696/2/download?apikey=x" length="100" type="application/x-bittorrent" />
+      <torznab:attr name="magneturl" value="magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" />
+      <torznab:attr name="seeders" value="3" />
+    </item>
+  </channel>
+</rss>`)
+	hits, err := parseTorznabRSS(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 {
+		t.Fatalf("hits %d", len(hits))
+	}
+	if hits[0].DownloadURL != "magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Fatalf("download url %q", hits[0].DownloadURL)
+	}
+}
+
 func TestTorznabClientEmptyBaseNoNetwork(t *testing.T) {
 	var dials int
 	hc := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
