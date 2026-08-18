@@ -4,6 +4,7 @@
 
 ### Fixed
 - Default Prowlarr/Torznab HTTP timeout 25s → 90s (override with `TORZNAB_TIMEOUT`) so a fan-out across many public indexers is not canceled while awaiting headers.
+- Honor `PROWLARR_URL` + `PROWLARR_API_KEY` and search Prowlarr's `/api/v1/search` JSON API (vault systemd does not set `TORZNAB_URL`).
 
 ## Unreleased
 

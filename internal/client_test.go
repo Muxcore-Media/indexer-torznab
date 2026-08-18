@@ -101,6 +101,8 @@ func TestTorznabClientHTTPtest(t *testing.T) {
 }
 
 func TestSearchUnconfigured(t *testing.T) {
+	t.Setenv("TORZNAB_URL", "")
+	t.Setenv("PROWLARR_URL", "")
 	m := NewModule(Config{GRPCAddr: ":0"})
 	if m.configured() {
 		t.Fatal("expected unconfigured")
@@ -120,6 +122,42 @@ func TestNormalizeAPIBase(t *testing.T) {
 	}
 	if got := normalizeAPIBase("http://x/1/api/"); got != "http://x/1/api" {
 		t.Errorf("got %q", got)
+	}
+}
+
+func TestProwlarrSearchJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/search" {
+			t.Errorf("path %s", r.URL.Path)
+		}
+		if r.Header.Get("X-Api-Key") != "k" {
+			t.Errorf("api key %q", r.Header.Get("X-Api-Key"))
+		}
+		if r.URL.Query().Get("type") != "tvsearch" {
+			t.Errorf("type %q", r.URL.Query().Get("type"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"title":"Show.S01E01","guid":"g1","magnetUrl":"magnet:?xt=urn:btih:abc","size":100,"seeders":3,"leechers":1,"indexer":"Knaben"}]`))
+	}))
+	t.Cleanup(srv.Close)
+
+	c := newProwlarrClient(srv.URL, "k", srv.Client())
+	hits, err := c.Search(context.Background(), torznabQuery{Query: "Show S01", Type: "tv", Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 || hits[0].Title != "Show.S01E01" || hits[0].DownloadURL != "magnet:?xt=urn:btih:abc" {
+		t.Fatalf("hits %+v", hits)
+	}
+}
+
+func TestProwlarrURLConfiguresWithoutTorznabURL(t *testing.T) {
+	t.Setenv("TORZNAB_URL", "")
+	t.Setenv("PROWLARR_URL", "http://127.0.0.1:9696")
+	t.Setenv("PROWLARR_API_KEY", "k")
+	m := NewModule(Config{GRPCAddr: ":0", HTTP: &http.Client{}, SkipVPNGate: true})
+	if !m.configured() || !m.prowlarr {
+		t.Fatalf("configured=%v prowlarr=%v", m.configured(), m.prowlarr)
 	}
 }
 

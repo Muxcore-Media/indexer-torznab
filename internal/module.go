@@ -38,6 +38,7 @@ type Module struct {
 	httpInjected bool
 	wgConfPath   string
 	vpnIface     string
+	prowlarr     bool
 }
 
 type Config struct {
@@ -77,13 +78,25 @@ func NewModule(cfg Config) *Module {
 	if cfg.APIKey == "" {
 		cfg.APIKey = strings.TrimSpace(os.Getenv("TORZNAB_API_KEY"))
 	}
+	prowlarr := false
+	if cfg.BaseURL == "" {
+		if p := strings.TrimSpace(os.Getenv("PROWLARR_URL")); p != "" {
+			cfg.BaseURL = strings.TrimRight(p, "/")
+			prowlarr = true
+		}
+	}
+	if cfg.APIKey == "" {
+		cfg.APIKey = strings.TrimSpace(os.Getenv("PROWLARR_API_KEY"))
+	}
 	if cfg.Name == "" {
 		cfg.Name = strings.TrimSpace(os.Getenv("TORZNAB_NAME"))
 	}
 	if cfg.Name == "" {
 		cfg.Name = defaultIndexerName
 	}
-	cfg.BaseURL = normalizeAPIBase(cfg.BaseURL)
+	if !prowlarr {
+		cfg.BaseURL = normalizeAPIBase(cfg.BaseURL)
+	}
 	if cfg.WGConfPath == "" {
 		cfg.WGConfPath = strings.TrimSpace(os.Getenv("WG_CONF"))
 	}
@@ -112,11 +125,19 @@ func NewModule(cfg Config) *Module {
 		httpInjected: httpInjected,
 		wgConfPath:   cfg.WGConfPath,
 		vpnIface:     vpnIface,
+		prowlarr:     prowlarr,
 	}
 	if m.api == nil {
-		m.api = newTorznabClient(m.baseURL, m.apiKey, hc)
+		m.api = m.newSearchAPI(hc)
 	}
 	return m
+}
+
+func (m *Module) newSearchAPI(hc *http.Client) searchAPI {
+	if m.prowlarr {
+		return newProwlarrClient(m.baseURL, m.apiKey, hc)
+	}
+	return newTorznabClient(m.baseURL, m.apiKey, hc)
 }
 
 func (m *Module) Info() contracts.ModuleInfo {
@@ -141,13 +162,13 @@ func (m *Module) Init(ctx context.Context) error {
 		return err
 	}
 	if liveRemoteRequiresVPN(m.baseURL, m.httpInjected) && m.vpnIface == "" {
-		bound, iface, err := newVPNBoundHTTPClient(m.wgConfPath, 25*time.Second)
+		bound, iface, err := newVPNBoundHTTPClient(m.wgConfPath, 90*time.Second)
 		if err != nil {
 			return fmt.Errorf("vpn-bound HTTP client: %w", err)
 		}
 		m.http = bound
 		m.vpnIface = iface
-		m.api = newTorznabClient(m.baseURL, m.apiKey, bound)
+		m.api = m.newSearchAPI(bound)
 	}
 	lis, err := net.Listen("tcp", m.grpcAddr)
 	if err != nil {
@@ -160,6 +181,7 @@ func (m *Module) Init(ctx context.Context) error {
 	slog.Info("indexer-torznab initialized",
 		"grpc", m.grpcAddr,
 		"configured", m.configured(),
+		"prowlarr", m.prowlarr,
 		"vpn_iface", m.vpnIface,
 	)
 	return nil
