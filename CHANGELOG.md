@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.1] — 2026-08-18
+
+### Fixed
+- Default Prowlarr/Torznab HTTP timeout 25s → 90s (override with `TORZNAB_TIMEOUT`) so a fan-out across many public indexers is not canceled while awaiting headers.
+
 ## Unreleased
 
 - Remote Torznab HTTP requires readable `WG_CONF` and source-binds to the WG iface (loopback/empty exempt)
