@@ -67,6 +67,42 @@ func TestParseTorznabPrefersMagnetURL(t *testing.T) {
 	}
 }
 
+func TestParseTorznabPrefersMagnetLinkOverHTTPEnclosure(t *testing.T) {
+	body := []byte(`<?xml version="1.0"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <item>
+      <title>Show.S01E01</title>
+      <link>magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb</link>
+      <enclosure url="http://127.0.0.1:9696/2/download?apikey=x" length="100" type="application/x-bittorrent" />
+      <torznab:attr name="seeders" value="3" />
+    </item>
+  </channel>
+</rss>`)
+	hits, err := parseTorznabRSS(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 {
+		t.Fatalf("hits %d", len(hits))
+	}
+	if hits[0].DownloadURL != "magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
+		t.Fatalf("download url %q", hits[0].DownloadURL)
+	}
+}
+
+func TestPreferMagnetDownload(t *testing.T) {
+	t.Parallel()
+	got := preferMagnetDownload("http://proxy/dl", "magnet:?xt=urn:btih:aa", "")
+	if got != "magnet:?xt=urn:btih:aa" {
+		t.Fatalf("got %q", got)
+	}
+	got = preferMagnetDownload("http://proxy/dl", "", "https://details")
+	if got != "http://proxy/dl" {
+		t.Fatalf("http fallback %q", got)
+	}
+}
+
 func TestTorznabClientEmptyBaseNoNetwork(t *testing.T) {
 	var dials int
 	hc := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
