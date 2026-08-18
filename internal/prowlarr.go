@@ -1,0 +1,117 @@
+package internal
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type prowlarrClient struct {
+	base   string
+	apiKey string
+	http   *http.Client
+}
+
+func newProwlarrClient(base, apiKey string, hc *http.Client) *prowlarrClient {
+	return &prowlarrClient{base: strings.TrimRight(strings.TrimSpace(base), "/"), apiKey: apiKey, http: hc}
+}
+
+type prowlarrRelease struct {
+	GUID        string    `json:"guid"`
+	Title       string    `json:"title"`
+	InfoURL     string    `json:"infoUrl"`
+	DownloadURL string    `json:"downloadUrl"`
+	MagnetURL   string    `json:"magnetUrl"`
+	Size        int64     `json:"size"`
+	Seeders     int32     `json:"seeders"`
+	Leechers    int32     `json:"leechers"`
+	Indexer     string    `json:"indexer"`
+	PublishDate time.Time `json:"publishDate"`
+}
+
+func (c *prowlarrClient) Search(ctx context.Context, q torznabQuery) ([]torznabHit, error) {
+	if c.base == "" {
+		return nil, nil
+	}
+	u, err := url.Parse(c.base + "/api/v1/search")
+	if err != nil {
+		return nil, fmt.Errorf("prowlarr url: %w", err)
+	}
+	vals := u.Query()
+	vals.Set("query", q.Query)
+	vals.Set("type", prowlarrType(q.Type))
+	if cat := categoryCSV(q.Type, q.Categories); cat != "" {
+		vals.Set("categories", cat)
+	}
+	if q.Limit > 0 {
+		vals.Set("limit", strconv.Itoa(q.Limit))
+	}
+	u.RawQuery = vals.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("X-Api-Key", c.apiKey)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("prowlarr HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+	}
+	var releases []prowlarrRelease
+	if err := json.Unmarshal(body, &releases); err != nil {
+		return nil, fmt.Errorf("prowlarr json: %w", err)
+	}
+	hits := make([]torznabHit, 0, len(releases))
+	for _, r := range releases {
+		dl := strings.TrimSpace(r.MagnetURL)
+		if dl == "" {
+			dl = strings.TrimSpace(r.DownloadURL)
+		}
+		guid := r.GUID
+		if guid == "" {
+			guid = dl
+		}
+		hits = append(hits, torznabHit{
+			Title:       r.Title,
+			GUID:        guid,
+			Link:        r.InfoURL,
+			InfoURL:     r.InfoURL,
+			DownloadURL: dl,
+			Size:        r.Size,
+			Seeders:     r.Seeders,
+			Peers:       r.Seeders + r.Leechers,
+			Category:    r.Indexer,
+			PubDate:     r.PublishDate,
+		})
+	}
+	return hits, nil
+}
+
+func prowlarrType(searchType string) string {
+	switch strings.ToLower(strings.TrimSpace(searchType)) {
+	case "movie":
+		return "movie"
+	case "tv":
+		return "tvsearch"
+	default:
+		return "search"
+	}
+}
