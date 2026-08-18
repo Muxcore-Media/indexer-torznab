@@ -55,7 +55,7 @@ func newVPNBoundHTTPClient(wgConf string, timeout time.Duration) (*http.Client, 
 		return nil, "", err
 	}
 	if timeout <= 0 {
-		timeout = 25 * time.Second
+		timeout = 90 * time.Second
 	}
 	dialer := &net.Dialer{
 		Timeout:   timeout,

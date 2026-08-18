@@ -61,7 +61,12 @@ func NewModule(cfg Config) *Module {
 		cfg.GRPCAddr = ":9486"
 	}
 	if cfg.Timeout == 0 {
-		cfg.Timeout = 25 * time.Second
+		cfg.Timeout = 90 * time.Second
+	}
+	if v := strings.TrimSpace(os.Getenv("TORZNAB_TIMEOUT")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.Timeout = d
+		}
 	}
 	if v := os.Getenv("TORZNAB_GRPC_ADDR"); v != "" {
 		cfg.GRPCAddr = v
@@ -118,7 +123,7 @@ func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
 		ID:           m.id,
 		Name:         "Torznab Indexer",
-		Version:      "0.1.0",
+		Version:      "0.1.1",
 		Roles:        []string{"indexer"},
 		Description:  "Aggregating indexer via Torznab/Newznab HTTP API (Prowlarr, Jackett)",
 		Author:       "MuxCore",
