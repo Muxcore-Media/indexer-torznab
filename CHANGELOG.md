@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.4] — 2026-08-20
+
+### Added
+- Mesh StorageService cache: search hits with a btih are written to `torrent/{infohash}/index.json` when `MUXCORE_GRPC_ADDR` is set (S3/local backends share the same key space as the downloader piece store).
+
 ## [0.1.3] — 2026-08-18
 
 ### Fixed

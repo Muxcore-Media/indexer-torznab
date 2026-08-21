@@ -15,6 +15,7 @@ import (
 
 	indexerv1 "github.com/Muxcore-Media/contracts-indexer/muxcore/indexer/v1"
 	"github.com/Muxcore-Media/core/pkg/contracts"
+	"github.com/Muxcore-Media/core/sdk/go/client"
 )
 
 const (
@@ -39,6 +40,7 @@ type Module struct {
 	wgConfPath   string
 	vpnIface     string
 	prowlarr     bool
+	mc           *client.Client
 }
 
 type Config struct {
@@ -144,7 +146,7 @@ func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
 		ID:           m.id,
 		Name:         "Torznab Indexer",
-		Version:      "0.1.3",
+		Version:      "0.1.4",
 		Roles:        []string{"indexer"},
 		Description:  "Aggregating indexer via Torznab/Newznab HTTP API (Prowlarr, Jackett)",
 		Author:       "MuxCore",
@@ -196,6 +198,7 @@ func (m *Module) Start(ctx context.Context) error {
 			slog.Error("indexer-torznab gRPC serve error", "error", err)
 		}
 	}()
+	go m.dialCore(context.Background())
 	return nil
 }
 
@@ -203,6 +206,12 @@ func (m *Module) Stop(ctx context.Context) error {
 	if m.grpcSrv != nil {
 		m.grpcSrv.GracefulStop()
 	}
+	m.mu.Lock()
+	if m.mc != nil {
+		_ = m.mc.Close()
+		m.mc = nil
+	}
+	m.mu.Unlock()
 	slog.Info("indexer-torznab stopped")
 	return nil
 }
@@ -252,6 +261,7 @@ func (m *Module) Search(ctx context.Context, req *indexerv1.SearchRequest) (*ind
 		return nil, fmt.Errorf("search: %w", err)
 	}
 	results := mapHits(hits, name)
+	go m.cacheHitsInStorage(results)
 	return &indexerv1.SearchResponse{
 		Results: results,
 		Total:   int32(len(results)),
