@@ -5,6 +5,7 @@ go 1.26.4
 require (
 	github.com/Muxcore-Media/contracts-indexer v0.1.0
 	github.com/Muxcore-Media/core/pkg/contracts v0.5.1
+	github.com/Muxcore-Media/core/sdk/go/client v0.5.1
 	github.com/Muxcore-Media/core/sdk/go/module v0.5.1
 	google.golang.org/grpc v1.82.1
 	google.golang.org/protobuf v1.36.11
@@ -20,8 +21,6 @@ require (
 
 replace github.com/Muxcore-Media/contracts-indexer => ../contracts-indexer
 
-replace github.com/Muxcore-Media/core => ../core
 
-replace github.com/Muxcore-Media/core/sdk/go/module => ../core/sdk/go/module
 
-replace github.com/Muxcore-Media/core/pkg/contracts => ../core/pkg/contracts
+
