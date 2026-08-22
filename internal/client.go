@@ -32,6 +32,7 @@ type torznabHit struct {
 	Link        string
 	InfoURL     string
 	DownloadURL string
+	Protocol    string
 	Size        int64
 	Seeders     int32
 	Peers       int32
@@ -227,7 +228,7 @@ func parseTorznabRSS(body []byte) ([]torznabHit, error) {
 				attrs[name] = a.Value
 			}
 		}
-		dl := preferMagnetDownload(attrs["magneturl"], it.Enclosure.URL, it.Link)
+		dl := preferDownloadURL(attrs["magneturl"], it.Enclosure.URL, it.Link)
 		size := parseInt64(attrs["size"])
 		if size == 0 {
 			size = parseInt64(it.Enclosure.Length)
@@ -264,6 +265,7 @@ func parseTorznabRSS(body []byte) ([]torznabHit, error) {
 			Link:        it.Link,
 			InfoURL:     info,
 			DownloadURL: dl,
+			Protocol:    detectDownloadProtocol(dl, it.Enclosure.Type),
 			Size:        size,
 			Seeders:     seeders,
 			Peers:       peers,
@@ -289,21 +291,53 @@ func parseInt64(s string) int64 {
 	return n
 }
 
-func preferMagnetDownload(candidates ...string) string {
-	var fallback string
+func preferDownloadURL(candidates ...string) string {
+	var nzb, magnet, fallback string
 	for _, c := range candidates {
 		c = strings.TrimSpace(c)
 		if c == "" {
 			continue
 		}
-		if strings.HasPrefix(strings.ToLower(c), "magnet:") {
-			return c
+		lower := strings.ToLower(c)
+		if strings.HasSuffix(lower, ".nzb") || strings.Contains(lower, "/nzb") {
+			if nzb == "" {
+				nzb = c
+			}
+			continue
+		}
+		if strings.HasPrefix(lower, "magnet:") {
+			if magnet == "" {
+				magnet = c
+			}
+			continue
 		}
 		if fallback == "" {
 			fallback = c
 		}
 	}
+	if nzb != "" {
+		return nzb
+	}
+	if magnet != "" {
+		return magnet
+	}
 	return fallback
+}
+
+func detectDownloadProtocol(url, enclosureType string) string {
+	u := strings.ToLower(strings.TrimSpace(url))
+	t := strings.ToLower(strings.TrimSpace(enclosureType))
+	if strings.HasSuffix(u, ".nzb") || strings.Contains(u, "/nzb") || strings.Contains(t, "nzb") {
+		return "usenet"
+	}
+	if strings.HasPrefix(u, "magnet:") || strings.HasSuffix(u, ".torrent") {
+		return "torrent"
+	}
+	return "torrent"
+}
+
+func preferMagnetDownload(candidates ...string) string {
+	return preferDownloadURL(candidates...)
 }
 
 func parsePubDate(s string) time.Time {

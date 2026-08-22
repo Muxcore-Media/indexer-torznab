@@ -81,7 +81,7 @@ func (c *prowlarrClient) Search(ctx context.Context, q torznabQuery) ([]torznabH
 	}
 	hits := make([]torznabHit, 0, len(releases))
 	for _, r := range releases {
-		dl := preferMagnetDownload(r.MagnetURL, r.DownloadURL)
+		dl := preferDownloadURL(r.MagnetURL, r.DownloadURL)
 		guid := r.GUID
 		if guid == "" {
 			guid = dl
@@ -92,6 +92,7 @@ func (c *prowlarrClient) Search(ctx context.Context, q torznabQuery) ([]torznabH
 			Link:        r.InfoURL,
 			InfoURL:     r.InfoURL,
 			DownloadURL: dl,
+			Protocol:    detectDownloadProtocol(dl, ""),
 			Size:        r.Size,
 			Seeders:     r.Seeders,
 			Peers:       r.Seeders + r.Leechers,
