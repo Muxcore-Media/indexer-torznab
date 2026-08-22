@@ -150,7 +150,7 @@ func (m *Module) Info() contracts.ModuleInfo {
 		Roles:        []string{"indexer"},
 		Description:  "Aggregating indexer via Torznab/Newznab HTTP API (Prowlarr, Jackett)",
 		Author:       "MuxCore",
-		Capabilities: []string{"indexer", "indexer.torznab"},
+		Capabilities: []string{"indexer", "indexer.torznab", "indexer.newznab"},
 		Contracts: []contracts.ContractDeclaration{
 			{Repo: "github.com/Muxcore-Media/contracts-indexer", Interface: "Indexer", Version: "v1"},
 		},
@@ -274,7 +274,7 @@ func (m *Module) GetCapabilities(ctx context.Context, _ *indexerv1.GetCapabiliti
 		SupportsMovieSearch: true,
 		SupportsTvSearch:    true,
 		SupportedCategories: []string{"movie", "tv", "audio", "book", "other"},
-		SupportedProtocols:  []string{"torrent"},
+		SupportedProtocols:  []string{"torrent", "usenet"},
 	}, nil
 }
 

@@ -21,7 +21,7 @@ func mapHits(hits []torznabHit, indexerName string) []*indexerv1.SearchResult {
 			Category:         h.Category,
 			ImdbId:           h.IMDB,
 			TvdbId:           h.TVDB,
-			DownloadProtocol: "torrent",
+			DownloadProtocol: normalizeIndexerProtocol(h.Protocol, h.DownloadURL),
 		}
 		if !h.PubDate.IsZero() {
 			r.PublishDate = timestamppb.New(h.PubDate)
