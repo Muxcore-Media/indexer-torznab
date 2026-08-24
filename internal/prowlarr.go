@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-type prowlarrClient struct {
+type prowlarrClient struct { //nolint:govet // fieldalignment: http client last for readability
 	base   string
 	apiKey string
 	http   *http.Client
@@ -22,7 +22,7 @@ func newProwlarrClient(base, apiKey string, hc *http.Client) *prowlarrClient {
 	return &prowlarrClient{base: strings.TrimRight(strings.TrimSpace(base), "/"), apiKey: apiKey, http: hc}
 }
 
-type prowlarrRelease struct {
+type prowlarrRelease struct { //nolint:govet // fieldalignment: JSON field order matches API
 	GUID        string    `json:"guid"`
 	Title       string    `json:"title"`
 	InfoURL     string    `json:"infoUrl"`
@@ -54,7 +54,7 @@ func (c *prowlarrClient) Search(ctx context.Context, q torznabQuery) ([]torznabH
 	}
 	u.RawQuery = vals.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (c *prowlarrClient) Search(ctx context.Context, q torznabQuery) ([]torznabH
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
 		return nil, err

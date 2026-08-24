@@ -16,7 +16,7 @@ import (
 
 // torrentIndexEntry is stored under torrent/{infohash}/index.json so any
 // StorageService backend (local, S3, …) can resolve search metadata by hash.
-type torrentIndexEntry struct {
+type torrentIndexEntry struct { //nolint:govet // fieldalignment: JSON field order for storage cache
 	InfoHash    string `json:"infohash"`
 	Title       string `json:"title"`
 	DownloadURL string `json:"download_url"`
@@ -69,14 +69,14 @@ func (m *Module) dialCore(ctx context.Context) {
 	_ = ctx
 }
 
-func (m *Module) cacheHitsInStorage(results []*indexerv1.SearchResult) {
+func (m *Module) cacheHitsInStorage(ctx context.Context, results []*indexerv1.SearchResult) {
 	m.mu.RLock()
 	mc := m.mc
 	m.mu.RUnlock()
 	if mc == nil || len(results) == 0 {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	for _, r := range results {
 		if r == nil {

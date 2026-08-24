@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -23,7 +24,7 @@ const (
 	indexerID          = int32(2)
 )
 
-type Module struct {
+type Module struct { //nolint:govet // fieldalignment: lifecycle fields grouped for readability
 	indexerv1.UnimplementedIndexerServiceServer
 
 	mu           sync.RWMutex
@@ -43,7 +44,7 @@ type Module struct {
 	mc           *client.Client
 }
 
-type Config struct {
+type Config struct { //nolint:govet // fieldalignment: config fields grouped for readability
 	ID          string
 	GRPCAddr    string
 	BaseURL     string
@@ -172,7 +173,8 @@ func (m *Module) Init(ctx context.Context) error {
 		m.vpnIface = iface
 		m.api = m.newSearchAPI(bound)
 	}
-	lis, err := net.Listen("tcp", m.grpcAddr)
+	var lc net.ListenConfig
+	lis, err := lc.Listen(ctx, "tcp", m.grpcAddr)
 	if err != nil {
 		return fmt.Errorf("listen gRPC %s: %w", m.grpcAddr, err)
 	}
@@ -198,7 +200,7 @@ func (m *Module) Start(ctx context.Context) error {
 			slog.Error("indexer-torznab gRPC serve error", "error", err)
 		}
 	}()
-	go m.dialCore(context.Background())
+	go m.dialCore(context.WithoutCancel(ctx))
 	return nil
 }
 
@@ -261,10 +263,10 @@ func (m *Module) Search(ctx context.Context, req *indexerv1.SearchRequest) (*ind
 		return nil, fmt.Errorf("search: %w", err)
 	}
 	results := mapHits(hits, name)
-	go m.cacheHitsInStorage(results)
+	go m.cacheHitsInStorage(context.WithoutCancel(ctx), results)
 	return &indexerv1.SearchResponse{
 		Results: results,
-		Total:   int32(len(results)),
+		Total:   clampInt32(len(results)),
 	}, nil
 }
 
@@ -276,6 +278,16 @@ func (m *Module) GetCapabilities(ctx context.Context, _ *indexerv1.GetCapabiliti
 		SupportedCategories: []string{"movie", "tv", "audio", "book", "other"},
 		SupportedProtocols:  []string{"torrent", "usenet"},
 	}, nil
+}
+
+func clampInt32(n int) int32 {
+	if n > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if n < math.MinInt32 {
+		return math.MinInt32
+	}
+	return int32(n)
 }
 
 func (m *Module) ListIndexers(ctx context.Context, _ *indexerv1.ListIndexersRequest) (*indexerv1.ListIndexersResponse, error) {
