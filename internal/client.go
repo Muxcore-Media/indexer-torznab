@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -26,7 +27,7 @@ type torznabQuery struct {
 	Offset     int
 }
 
-type torznabHit struct {
+type torznabHit struct { //nolint:govet // fieldalignment: stable API field order
 	Title       string
 	GUID        string
 	Link        string
@@ -42,7 +43,7 @@ type torznabHit struct {
 	TVDB        int32
 }
 
-type torznabClient struct {
+type torznabClient struct { //nolint:govet // fieldalignment: http client last for readability
 	base   string
 	apiKey string
 	http   *http.Client
@@ -97,7 +98,7 @@ func (c *torznabClient) Search(ctx context.Context, q torznabQuery) ([]torznabHi
 	}
 	u.RawQuery = vals.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +108,7 @@ func (c *torznabClient) Search(ctx context.Context, q torznabQuery) ([]torznabHi
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
 		return nil, err
@@ -181,14 +182,14 @@ type rssChannel struct {
 }
 
 type rssItem struct {
-	Title     string         `xml:"title"`
-	GUID      rssGUID        `xml:"guid"`
-	Link      string         `xml:"link"`
-	Comments  string         `xml:"comments"`
-	PubDate   string         `xml:"pubDate"`
-	Enclosure rssEnclosure   `xml:"enclosure"`
-	Attrs     []torznabAttr  `xml:"http://torznab.com/schemas/2015/feed attr"`
-	NNAttrs   []torznabAttr  `xml:"http://www.newznab.com/DTD/2010/feeds/attributes/ attr"`
+	Title     string        `xml:"title"`
+	GUID      rssGUID       `xml:"guid"`
+	Link      string        `xml:"link"`
+	Comments  string        `xml:"comments"`
+	PubDate   string        `xml:"pubDate"`
+	Enclosure rssEnclosure  `xml:"enclosure"`
+	Attrs     []torznabAttr `xml:"http://torznab.com/schemas/2015/feed attr"`
+	NNAttrs   []torznabAttr `xml:"http://www.newznab.com/DTD/2010/feeds/attributes/ attr"`
 }
 
 type rssGUID struct {
@@ -233,10 +234,10 @@ func parseTorznabRSS(body []byte) ([]torznabHit, error) {
 		if size == 0 {
 			size = parseInt64(it.Enclosure.Length)
 		}
-		seeders := int32(parseInt64(attrs["seeders"]))
-		peers := int32(parseInt64(attrs["peers"]))
+		seeders := parseInt32(attrs["seeders"])
+		peers := parseInt32(attrs["peers"])
 		if peers == 0 {
-			leech := int32(parseInt64(attrs["leechers"]))
+			leech := parseInt32(attrs["leechers"])
 			if seeders > 0 || leech > 0 {
 				peers = seeders + leech
 			}
@@ -272,7 +273,7 @@ func parseTorznabRSS(body []byte) ([]torznabHit, error) {
 			Category:    attrs["category"],
 			PubDate:     parsePubDate(it.PubDate),
 			IMDB:        imdb,
-			TVDB:        int32(parseInt64(attrs["tvdbid"])),
+			TVDB:        parseInt32(attrs["tvdbid"]),
 		}
 		out = append(out, hit)
 	}
@@ -289,6 +290,17 @@ func parseInt64(s string) int64 {
 		return 0
 	}
 	return n
+}
+
+func parseInt32(s string) int32 {
+	n := parseInt64(s)
+	if n > int64(math.MaxInt32) {
+		return math.MaxInt32
+	}
+	if n < int64(math.MinInt32) {
+		return math.MinInt32
+	}
+	return int32(n)
 }
 
 func preferDownloadURL(candidates ...string) string {
@@ -324,8 +336,8 @@ func preferDownloadURL(candidates ...string) string {
 	return fallback
 }
 
-func detectDownloadProtocol(url, enclosureType string) string {
-	u := strings.ToLower(strings.TrimSpace(url))
+func detectDownloadProtocol(rawURL, enclosureType string) string {
+	u := strings.ToLower(strings.TrimSpace(rawURL))
 	t := strings.ToLower(strings.TrimSpace(enclosureType))
 	if strings.HasSuffix(u, ".nzb") || strings.Contains(u, "/nzb") || strings.Contains(t, "nzb") {
 		return "usenet"
