@@ -103,6 +103,7 @@ func validateWGConfReadable(path string) error {
 	if path == "" {
 		return fmt.Errorf("WG_CONF is required for remote Torznab HTTP (set WG_CONF, or use loopback/empty TORZNAB_URL)")
 	}
+	//nolint:gosec // WG_CONF is an operator-controlled deployment path, not request input
 	fi, err := os.Stat(path)
 	if err != nil {
 		return fmt.Errorf("WG_CONF missing or unreadable (%s): %w", path, err)
@@ -110,6 +111,7 @@ func validateWGConfReadable(path string) error {
 	if fi.IsDir() {
 		return fmt.Errorf("WG_CONF is a directory, not a file: %s", path)
 	}
+	//nolint:gosec // WG_CONF is an operator-controlled deployment path, not request input
 	f, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("WG_CONF unreadable (%s): %w", path, err)
