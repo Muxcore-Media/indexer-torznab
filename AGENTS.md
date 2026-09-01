@@ -8,7 +8,7 @@ MuxCore sidecar module (`indexer-torznab`). Workspace deploy and SSH: [`../AGENT
 |-------|-------|
 | Directory | `indexer-torznab` |
 | Capabilities | see muxcore.json |
-| Contracts | none declared |
+| Contracts | `contracts-indexer` Indexer v1 |
 
 ## Agent rules
 
@@ -23,4 +23,5 @@ MuxCore sidecar module (`indexer-torznab`). Workspace deploy and SSH: [`../AGENT
 ```bash
 cd indexer-torznab
 go test ./...
+make lint
 ```

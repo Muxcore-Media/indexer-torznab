@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,15 +88,31 @@ func isLoopbackOrEmptyURL(raw string) bool {
 	if raw == "" {
 		return true
 	}
-	u := strings.ToLower(raw)
-	switch {
-	case strings.HasPrefix(u, "http://127.0.0.1"), strings.HasPrefix(u, "https://127.0.0.1"),
-		strings.HasPrefix(u, "http://localhost"), strings.HasPrefix(u, "https://localhost"),
-		strings.HasPrefix(u, "http://[::1]"), strings.HasPrefix(u, "https://[::1]"):
-		return true
-	default:
-		return false
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Hostname() == "" {
+		lower := strings.ToLower(raw)
+		return strings.HasPrefix(lower, "http://127.0.0.1") ||
+			strings.HasPrefix(lower, "https://127.0.0.1") ||
+			strings.HasPrefix(lower, "http://localhost") ||
+			strings.HasPrefix(lower, "https://localhost") ||
+			strings.HasPrefix(lower, "http://[::1]") ||
+			strings.HasPrefix(lower, "https://[::1]")
 	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return true
+	}
+	if strings.HasSuffix(host, ".local") {
+		return true
+	}
+	// Docker Compose / k8s service names (no dot).
+	if !strings.Contains(host, ".") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
+	}
+	return false
 }
 
 func validateWGConfReadable(path string) error {

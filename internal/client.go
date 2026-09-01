@@ -17,14 +17,16 @@ type searchAPI interface {
 	Search(ctx context.Context, q torznabQuery) ([]torznabHit, error)
 }
 
-type torznabQuery struct {
+type torznabQuery struct { //nolint:govet // fieldalignment: stable query field order
 	Query      string
 	Type       string
 	Categories []string
 	Season     int
 	Episode    int
+	Year       int
 	Limit      int
 	Offset     int
+	IndexerIDs []int32
 }
 
 type torznabHit struct { //nolint:govet // fieldalignment: stable API field order
@@ -40,7 +42,10 @@ type torznabHit struct { //nolint:govet // fieldalignment: stable API field orde
 	Category    string
 	PubDate     time.Time
 	IMDB        string
+	TMDB        int32
 	TVDB        int32
+	IndexerName string
+	IndexerID   int32
 }
 
 type torznabClient struct { //nolint:govet // fieldalignment: http client last for readability
@@ -88,6 +93,9 @@ func (c *torznabClient) Search(ctx context.Context, q torznabQuery) ([]torznabHi
 	if q.Offset > 0 {
 		vals.Set("offset", strconv.Itoa(q.Offset))
 	}
+	if q.Year > 0 {
+		vals.Set("year", strconv.Itoa(q.Year))
+	}
 	if strings.EqualFold(strings.TrimSpace(q.Type), "tv") {
 		if q.Season > 0 {
 			vals.Set("season", strconv.Itoa(q.Season))
@@ -113,8 +121,14 @@ func (c *torznabClient) Search(ctx context.Context, q torznabQuery) ([]torznabHi
 	if err != nil {
 		return nil, err
 	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, newRateLimited(fmt.Sprintf("torznab HTTP 429: %s", truncate(string(body), 200)))
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("torznab HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+	}
+	if apiErr := parseTorznabError(body); apiErr != nil {
+		return nil, apiErr
 	}
 	return parseTorznabRSS(body)
 }
@@ -125,6 +139,10 @@ func torznabT(searchType string) string {
 		return "movie"
 	case "tv":
 		return "tvsearch"
+	case "music":
+		return "music"
+	case "book", "audiobook":
+		return "book"
 	default:
 		return "search"
 	}
@@ -149,7 +167,7 @@ func categoryCSV(searchType string, categories []string) string {
 			ids = append(ids, "5000")
 		case "audio", "music", "flac":
 			ids = append(ids, "3000")
-		case "book", "ebook", "ebooks":
+		case "book", "ebook", "ebooks", "audiobook":
 			ids = append(ids, "7000")
 		}
 	}
@@ -159,6 +177,10 @@ func categoryCSV(searchType string, categories []string) string {
 			ids = append(ids, "2000")
 		case "tv":
 			ids = append(ids, "5000")
+		case "music":
+			ids = append(ids, "3000")
+		case "book", "audiobook":
+			ids = append(ids, "7000")
 		}
 	}
 	return strings.Join(ids, ",")
@@ -173,8 +195,14 @@ func truncate(s string, n int) string {
 
 // --- XML ---
 
-type rssRoot struct {
-	Channel rssChannel `xml:"channel"`
+type rssRoot struct { //nolint:govet // fieldalignment: XML field order
+	Channel rssChannel   `xml:"channel"`
+	Error   torznabError `xml:"error"`
+}
+
+type torznabError struct {
+	Code        string `xml:"code,attr"`
+	Description string `xml:"description,attr"`
 }
 
 type rssChannel struct {
@@ -207,10 +235,55 @@ type torznabAttr struct {
 	Value string `xml:"value,attr"`
 }
 
+func parseTorznabError(body []byte) error {
+	var errEl struct {
+		XMLName     xml.Name `xml:"error"`
+		Code        string   `xml:"code,attr"`
+		Description string   `xml:"description,attr"`
+	}
+	if err := xml.Unmarshal(body, &errEl); err != nil {
+		return nil //nolint:nilerr // body is not a standalone Newznab <error> document
+	}
+	if errEl.XMLName.Local != "error" && errEl.Code == "" && errEl.Description == "" {
+		return nil
+	}
+	code := strings.TrimSpace(errEl.Code)
+	desc := strings.TrimSpace(errEl.Description)
+	msg := "torznab error"
+	if code != "" {
+		msg += " code=" + code
+	}
+	if desc != "" {
+		msg += ": " + desc
+	}
+	if code == "429" || strings.Contains(strings.ToLower(desc), "rate limit") {
+		return newRateLimited(msg)
+	}
+	return fmt.Errorf("%s", msg)
+}
+
 func parseTorznabRSS(body []byte) ([]torznabHit, error) {
+	if apiErr := parseTorznabError(body); apiErr != nil {
+		return nil, apiErr
+	}
 	var root rssRoot
 	if err := xml.Unmarshal(body, &root); err != nil {
 		return nil, fmt.Errorf("torznab xml: %w", err)
+	}
+	if root.Error.Code != "" || root.Error.Description != "" {
+		code := strings.TrimSpace(root.Error.Code)
+		desc := strings.TrimSpace(root.Error.Description)
+		msg := "torznab error"
+		if code != "" {
+			msg += " code=" + code
+		}
+		if desc != "" {
+			msg += ": " + desc
+		}
+		if code == "429" || strings.Contains(strings.ToLower(desc), "rate limit") {
+			return nil, newRateLimited(msg)
+		}
+		return nil, fmt.Errorf("%s", msg)
 	}
 	out := make([]torznabHit, 0, len(root.Channel.Items))
 	for _, it := range root.Channel.Items {
@@ -229,7 +302,7 @@ func parseTorznabRSS(body []byte) ([]torznabHit, error) {
 				attrs[name] = a.Value
 			}
 		}
-		dl := preferDownloadURL(attrs["magneturl"], it.Enclosure.URL, it.Link)
+		dl := stripSensitiveQueryParams(preferDownloadURL(attrs["magneturl"], it.Enclosure.URL, it.Link))
 		size := parseInt64(attrs["size"])
 		if size == 0 {
 			size = parseInt64(it.Enclosure.Length)
@@ -249,9 +322,9 @@ func parseTorznabRSS(body []byte) ([]torznabHit, error) {
 		if guid == "" {
 			guid = dl
 		}
-		info := strings.TrimSpace(it.Comments)
+		info := stripSensitiveQueryParams(strings.TrimSpace(it.Comments))
 		if info == "" {
-			info = strings.TrimSpace(it.Link)
+			info = stripSensitiveQueryParams(strings.TrimSpace(it.Link))
 		}
 		imdb := strings.TrimSpace(attrs["imdb"])
 		if imdb == "" {
@@ -306,7 +379,7 @@ func parseInt32(s string) int32 {
 func preferDownloadURL(candidates ...string) string {
 	var nzb, magnet, fallback string
 	for _, c := range candidates {
-		c = strings.TrimSpace(c)
+		c = stripSensitiveQueryParams(strings.TrimSpace(c))
 		if c == "" {
 			continue
 		}
@@ -334,6 +407,34 @@ func preferDownloadURL(candidates ...string) string {
 		return magnet
 	}
 	return fallback
+}
+
+var sensitiveQueryKeys = map[string]struct{}{
+	"apikey": {}, "api_key": {}, "passkey": {}, "token": {}, "authkey": {},
+}
+
+func stripSensitiveQueryParams(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || (!strings.Contains(raw, "?") && !strings.Contains(raw, "&")) {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" {
+		return raw
+	}
+	q := u.Query()
+	changed := false
+	for key := range q {
+		if _, ok := sensitiveQueryKeys[strings.ToLower(key)]; ok {
+			q.Del(key)
+			changed = true
+		}
+	}
+	if !changed {
+		return raw
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func detectDownloadProtocol(rawURL, enclosureType string) string {
