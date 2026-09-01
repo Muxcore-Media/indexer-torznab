@@ -1,4 +1,4 @@
-.PHONY: build test clean fmt tidy ci help
+.PHONY: build test lint clean fmt tidy docker ci help
 
 GO ?= go
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.0.0-dev")
@@ -12,6 +12,9 @@ build:
 test:
 	CGO_ENABLED=0 $(GO) test -count=1 -timeout 60s ./...
 
+lint:
+	golangci-lint run --timeout 120s ./...
+
 clean:
 	rm -f $(BINARY)
 	rm -f cmd/module/module
@@ -23,7 +26,10 @@ fmt:
 tidy:
 	$(GO) mod tidy
 
-ci: test build
+docker:
+	docker build -t ghcr.io/muxcore-media/$(BINARY):$(VERSION) .
+
+ci: lint test build
 
 help:
-	@echo "Targets: build test clean fmt tidy ci"
+	@echo "Targets: build test lint clean fmt tidy docker ci"

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	indexerv1 "github.com/Muxcore-Media/contracts-indexer/muxcore/indexer/v1"
 	"github.com/Muxcore-Media/core/pkg/contracts"
@@ -21,14 +23,26 @@ import (
 
 const (
 	defaultIndexerName = "Torznab"
-	indexerID          = int32(2)
+	moduleVersion      = "0.1.5"
+	healthProbeTimeout = 5 * time.Second
 )
+
+type capabilitiesAPI interface {
+	FetchCapabilities(ctx context.Context) (*indexerv1.GetCapabilitiesResponse, error)
+	ProbeHealth(ctx context.Context) error
+}
+
+type indexerListAPI interface {
+	ListIndexers(ctx context.Context) ([]prowlarrIndexer, error)
+}
 
 type Module struct { //nolint:govet // fieldalignment: lifecycle fields grouped for readability
 	indexerv1.UnimplementedIndexerServiceServer
 
 	mu           sync.RWMutex
 	api          searchAPI
+	capsAPI      capabilitiesAPI
+	listAPI      indexerListAPI
 	baseURL      string
 	apiKey       string
 	name         string
@@ -41,6 +55,7 @@ type Module struct { //nolint:govet // fieldalignment: lifecycle fields grouped 
 	wgConfPath   string
 	vpnIface     string
 	prowlarr     bool
+	httpTimeout  time.Duration
 	mc           *client.Client
 }
 
@@ -53,6 +68,8 @@ type Config struct { //nolint:govet // fieldalignment: config fields grouped for
 	Timeout     time.Duration
 	HTTP        *http.Client
 	API         searchAPI
+	CapsAPI     capabilitiesAPI
+	ListAPI     indexerListAPI
 	WGConfPath  string
 	SkipVPNGate bool
 }
@@ -124,30 +141,55 @@ func NewModule(cfg Config) *Module {
 		apiKey:       cfg.APIKey,
 		name:         cfg.Name,
 		http:         hc,
-		api:          cfg.API,
 		httpInjected: httpInjected,
 		wgConfPath:   cfg.WGConfPath,
 		vpnIface:     vpnIface,
 		prowlarr:     prowlarr,
+		httpTimeout:  cfg.Timeout,
 	}
-	if m.api == nil {
-		m.api = m.newSearchAPI(hc)
+	if cfg.API != nil {
+		m.api = cfg.API
+	}
+	if cfg.CapsAPI != nil {
+		m.capsAPI = cfg.CapsAPI
+	}
+	if cfg.ListAPI != nil {
+		m.listAPI = cfg.ListAPI
+	}
+	if m.api == nil || m.capsAPI == nil || (m.prowlarr && m.listAPI == nil) {
+		m.bindUpstreamClients(hc)
 	}
 	return m
 }
 
-func (m *Module) newSearchAPI(hc *http.Client) searchAPI {
+func (m *Module) bindUpstreamClients(hc *http.Client) {
 	if m.prowlarr {
-		return newProwlarrClient(m.baseURL, m.apiKey, hc)
+		pc := newProwlarrClient(m.baseURL, m.apiKey, hc)
+		if m.api == nil {
+			m.api = pc
+		}
+		if m.capsAPI == nil {
+			m.capsAPI = pc
+		}
+		if m.listAPI == nil {
+			m.listAPI = pc
+		}
+		return
 	}
-	return newTorznabClient(m.baseURL, m.apiKey, hc)
+	tc := newTorznabClient(m.baseURL, m.apiKey, hc)
+	if m.api == nil {
+		m.api = tc
+	}
+	if m.capsAPI == nil {
+		m.capsAPI = tc
+	}
 }
 
 func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
 		ID:           m.id,
 		Name:         "Torznab Indexer",
-		Version:      "0.1.4",
+		Version:      moduleVersion,
 		Roles:        []string{"indexer"},
 		Description:  "Aggregating indexer via Torznab/Newznab HTTP API (Prowlarr, Jackett)",
 		Author:       "MuxCore",
@@ -156,7 +198,6 @@ func (m *Module) Info() contracts.ModuleInfo {
 			{Repo: "github.com/Muxcore-Media/contracts-indexer", Interface: "Indexer", Version: "v1"},
 		},
 		MinCoreVersion: "0.4.0",
-		HTTPAddr:       m.grpcAddr,
 	}
 }
 
@@ -165,13 +206,13 @@ func (m *Module) Init(ctx context.Context) error {
 		return err
 	}
 	if liveRemoteRequiresVPN(m.baseURL, m.httpInjected) && m.vpnIface == "" {
-		bound, iface, err := newVPNBoundHTTPClient(m.wgConfPath, 90*time.Second)
+		bound, iface, err := newVPNBoundHTTPClient(m.wgConfPath, m.httpTimeout)
 		if err != nil {
 			return fmt.Errorf("vpn-bound HTTP client: %w", err)
 		}
 		m.http = bound
 		m.vpnIface = iface
-		m.api = m.newSearchAPI(bound)
+		m.bindUpstreamClients(bound)
 	}
 	var lc net.ListenConfig
 	lis, err := lc.Listen(ctx, "tcp", m.grpcAddr)
@@ -218,7 +259,20 @@ func (m *Module) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (m *Module) Health(ctx context.Context) error { return nil }
+func (m *Module) Health(ctx context.Context) error {
+	if !m.configured() {
+		return nil
+	}
+	m.mu.RLock()
+	caps := m.capsAPI
+	m.mu.RUnlock()
+	if caps == nil {
+		return nil
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, healthProbeTimeout)
+	defer cancel()
+	return caps.ProbeHealth(probeCtx)
+}
 
 func (m *Module) configured() bool {
 	m.mu.RLock()
@@ -255,11 +309,16 @@ func (m *Module) Search(ctx context.Context, req *indexerv1.SearchRequest) (*ind
 		Categories: req.GetCategories(),
 		Season:     int(req.GetSeason()),
 		Episode:    int(req.GetEpisode()),
+		Year:       int(req.GetYear()),
 		Limit:      int(req.GetLimit()),
 		Offset:     int(req.GetOffset()),
+		IndexerIDs: req.GetIndexerIds(),
 	})
 	if err != nil {
 		slog.Warn("indexer-torznab search failed", "error", err)
+		if isResourceExhausted(err) {
+			return nil, status.Errorf(codes.ResourceExhausted, "search: %v", err)
+		}
 		return nil, fmt.Errorf("search: %w", err)
 	}
 	results := mapHits(hits, name)
@@ -271,13 +330,18 @@ func (m *Module) Search(ctx context.Context, req *indexerv1.SearchRequest) (*ind
 }
 
 func (m *Module) GetCapabilities(ctx context.Context, _ *indexerv1.GetCapabilitiesRequest) (*indexerv1.GetCapabilitiesResponse, error) {
-	return &indexerv1.GetCapabilitiesResponse{
-		SupportsSearch:      true,
-		SupportsMovieSearch: true,
-		SupportsTvSearch:    true,
-		SupportedCategories: []string{"movie", "tv", "audio", "book", "other"},
-		SupportedProtocols:  []string{"torrent", "usenet"},
-	}, nil
+	if !m.configured() {
+		return unconfiguredCapabilities(), nil
+	}
+	m.mu.RLock()
+	caps := m.capsAPI
+	m.mu.RUnlock()
+	if caps == nil {
+		return unconfiguredCapabilities(), nil
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, healthProbeTimeout)
+	defer cancel()
+	return caps.FetchCapabilities(probeCtx)
 }
 
 func clampInt32(n int) int32 {
@@ -291,17 +355,49 @@ func clampInt32(n int) int32 {
 }
 
 func (m *Module) ListIndexers(ctx context.Context, _ *indexerv1.ListIndexersRequest) (*indexerv1.ListIndexersResponse, error) {
+	if !m.configured() {
+		return &indexerv1.ListIndexersResponse{}, nil
+	}
 	m.mu.RLock()
+	listAPI := m.listAPI
 	name := m.name
+	prowlarr := m.prowlarr
 	m.mu.RUnlock()
+
+	if prowlarr && listAPI != nil {
+		indexers, err := listAPI.ListIndexers(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list indexers: %w", err)
+		}
+		out := make([]*indexerv1.IndexerInfo, 0, len(indexers))
+		for _, ix := range indexers {
+			proto := strings.TrimSpace(ix.Protocol)
+			if proto == "" {
+				proto = "torrent"
+			}
+			lang := strings.TrimSpace(ix.Language)
+			if lang == "" {
+				lang = "en"
+			}
+			out = append(out, &indexerv1.IndexerInfo{
+				Id:         ix.ID,
+				Name:       ix.Name,
+				Protocol:   proto,
+				Language:   lang,
+				Configured: ix.Enable,
+			})
+		}
+		return &indexerv1.ListIndexersResponse{Indexers: out}, nil
+	}
+
 	return &indexerv1.ListIndexersResponse{
 		Indexers: []*indexerv1.IndexerInfo{
 			{
-				Id:         indexerID,
+				Id:         defaultTorznabIndexerID,
 				Name:       name,
 				Protocol:   "torrent",
 				Language:   "en",
-				Configured: m.configured(),
+				Configured: true,
 			},
 		},
 	}, nil

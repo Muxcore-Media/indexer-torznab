@@ -42,8 +42,8 @@ func TestEmptyURLInitWithoutVPN(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !caps.SupportsSearch {
-		t.Fatal("caps should work without TORZNAB_URL")
+	if caps.SupportsSearch {
+		t.Fatal("unconfigured must not advertise search")
 	}
 }
 
@@ -61,10 +61,38 @@ func TestRemoteMissingWGFile(t *testing.T) {
 }
 
 func TestIsLoopbackOrEmptyURL(t *testing.T) {
-	if !isLoopbackOrEmptyURL("") || !isLoopbackOrEmptyURL("http://localhost:1/api") {
-		t.Fatal("expected loopback/empty true")
+	t.Parallel()
+	cases := []struct {
+		url  string
+		want bool
+	}{
+		{"", true},
+		{"http://localhost:1/api", true},
+		{"http://127.0.0.1:9696/1", true},
+		{"http://[::1]:9696/1", true},
+		{"http://192.168.1.10:9696/1", true},
+		{"http://10.0.0.5:9696/1", true},
+		{"http://172.16.0.2:9696/1", true},
+		{"http://prowlarr:9696/1", true},
+		{"http://host.local:9696/1", true},
+		{"https://prowlarr.lan/1", false},
+		{"https://prowlarr.example.test/1", false},
 	}
-	if isLoopbackOrEmptyURL("https://prowlarr.lan/1") {
-		t.Fatal("remote should not be loopback")
+	for _, tc := range cases {
+		if got := isLoopbackOrEmptyURL(tc.url); got != tc.want {
+			t.Errorf("isLoopbackOrEmptyURL(%q) = %v, want %v", tc.url, got, tc.want)
+		}
 	}
+}
+
+func TestDockerHostnameInitWithoutVPN(t *testing.T) {
+	t.Setenv("WG_CONF", "")
+	m := NewModule(Config{
+		GRPCAddr: ":0",
+		BaseURL:  "http://prowlarr:9696/1",
+	})
+	if err := m.Init(context.Background()); err != nil {
+		t.Fatalf("docker hostname should not require WG_CONF: %v", err)
+	}
+	t.Cleanup(func() { _ = m.Stop(context.Background()) })
 }

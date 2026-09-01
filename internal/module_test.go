@@ -49,13 +49,17 @@ func TestSearchUnconfiguredNoNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if list.Indexers[0].Configured {
-		t.Error("expected configured=false")
+	if len(list.GetIndexers()) != 0 {
+		t.Fatalf("expected no indexers when unconfigured, got %d", len(list.GetIndexers()))
 	}
 }
 
 func TestSearchViaHTTPtest(t *testing.T) {
-	body, err := os.ReadFile(filepath.Join("testdata", "search_sample.xml"))
+	searchBody, err := os.ReadFile(filepath.Join("testdata", "search_sample.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	capsBody, err := os.ReadFile(filepath.Join("testdata", "caps_sample.xml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,8 +67,13 @@ func TestSearchViaHTTPtest(t *testing.T) {
 		if !strings.HasSuffix(r.URL.Path, "/api") {
 			t.Errorf("path: %s", r.URL.Path)
 		}
+		if r.URL.Query().Get("t") == "caps" {
+			w.Header().Set("Content-Type", "application/xml")
+			_, _ = w.Write(capsBody)
+			return
+		}
 		w.Header().Set("Content-Type", "application/rss+xml")
-		_, _ = w.Write(body)
+		_, _ = w.Write(searchBody)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -83,6 +92,10 @@ func TestSearchViaHTTPtest(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = m.Stop(ctx) })
+
+	if err := m.Health(ctx); err != nil {
+		t.Fatalf("health: %v", err)
+	}
 
 	resp, err := m.Search(ctx, &indexerv1.SearchRequest{
 		Query: "Fight Club",
@@ -106,7 +119,7 @@ func TestSearchViaHTTPtest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !caps.SupportsMovieSearch || !caps.SupportsTvSearch {
+	if !caps.SupportsMovieSearch || !caps.SupportsTvSearch || !caps.SupportsMusicSearch {
 		t.Errorf("capabilities: %+v", caps)
 	}
 
@@ -116,6 +129,9 @@ func TestSearchViaHTTPtest(t *testing.T) {
 	}
 	if !list.Indexers[0].Configured {
 		t.Error("expected configured=true")
+	}
+	if list.Indexers[0].Id != defaultTorznabIndexerID {
+		t.Errorf("indexer id: %d", list.Indexers[0].Id)
 	}
 }
 
@@ -182,7 +198,13 @@ func TestModuleInfo(t *testing.T) {
 	if len(info.Capabilities) == 0 || info.Capabilities[0] != "indexer" {
 		t.Errorf("capabilities: %v", info.Capabilities)
 	}
-	if info.HTTPAddr != ":9486" {
-		t.Errorf("HTTPAddr: %s (want :9486; avoid clash with piratebay :9485 / ffprobe :9480)", info.HTTPAddr)
+	if info.HTTPAddr != "" {
+		t.Errorf("HTTPAddr: %q (module has no HTTP listener)", info.HTTPAddr)
+	}
+	if info.Version != moduleVersion {
+		t.Errorf("version: %s", info.Version)
+	}
+	if len(info.Contracts) != 1 || info.Contracts[0].Version != "v1" {
+		t.Errorf("contracts: %+v", info.Contracts)
 	}
 }

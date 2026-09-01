@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.5] — 2026-08-31
+
+### Added
+- RFC1918, link-local, `.local`, and docker-style hostnames exempt from `WG_CONF` VPN gate.
+- Prowlarr `ListIndexers` via `/api/v1/indexer`; `SearchRequest.indexer_ids` forwarded as `indexerIds`.
+- `GetCapabilities` driven from Torznab `t=caps` XML; unconfigured module does not advertise search.
+- `Health` probes upstream (`t=caps` or Prowlarr `/api/v1/system/status`).
+- Music/book/audiobook search types and `year` query param.
+- HTTP 429 and Newznab `<error>` mapped to gRPC `ResourceExhausted`.
+- `make lint`, Forgejo golangci-lint CI, and Dockerfile (`EXPOSE 9486`).
+
+### Fixed
+- Strip `apikey` (and equivalent) from result download/info URLs before cache or automation history.
+- Prowlarr release mapping: child indexer name/id, IMDB/TMDB/TVDB, protocol, category; forward search offset.
+- Docs/metadata drift (`PROWLARR_*`, `TORZNAB_TIMEOUT`, contract v1, no bogus `HTTPAddr`).
+
+### Security
+- Remote Torznab HTTP requires readable `WG_CONF` and source-binds to the WG iface (public hostnames only).
+
 ## [0.1.4] — 2026-08-20
 
 ### Added
@@ -20,10 +39,6 @@
 ### Fixed
 - Default Prowlarr/Torznab HTTP timeout 25s → 90s (override with `TORZNAB_TIMEOUT`) so a fan-out across many public indexers is not canceled while awaiting headers.
 - Honor `PROWLARR_URL` + `PROWLARR_API_KEY` and search Prowlarr's `/api/v1/search` JSON API (vault systemd does not set `TORZNAB_URL`).
-
-## Unreleased
-
-- Remote Torznab HTTP requires readable `WG_CONF` and source-binds to the WG iface (loopback/empty exempt)
 
 ## [0.1.0] — 2026-08-09
 
