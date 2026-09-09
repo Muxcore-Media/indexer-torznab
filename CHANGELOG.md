@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.6] — 2026-09-09
+
+### Added
+- Prowlarr-mode `GetIndexer` / `CreateIndexer` / `UpdateIndexer` / `DeleteIndexer` for Torznab/Newznab feeds.
+- Direct Torznab/Jackett returns `FailedPrecondition` (single-feed `TORZNAB_URL`, not a household registry).
+
 ## [0.1.5] — 2026-08-31
 
 ### Added

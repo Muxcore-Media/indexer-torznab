@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -449,6 +450,81 @@ func TestHealthUpstreamDown(t *testing.T) {
 	t.Cleanup(func() { _ = m.Stop(ctx) })
 	if err := m.Health(ctx); err == nil {
 		t.Fatal("expected health failure")
+	}
+}
+
+func TestProwlarrCreateUpdateDeleteIndexer(t *testing.T) {
+	var created map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/indexer/schema":
+			_, _ = w.Write([]byte(`[{"implementation":"Torznab","configContract":"TorznabSettings","fields":[{"name":"baseUrl"},{"name":"apiKey"}]}]`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/indexer":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["name"] != "Knaben" {
+				t.Fatalf("name %#v", body["name"])
+			}
+			body["id"] = 9
+			created = body
+			_ = json.NewEncoder(w).Encode(body)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/indexer/9":
+			_ = json.NewEncoder(w).Encode(created)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/indexer/9":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["enable"] != false {
+				t.Fatalf("enable %#v", body["enable"])
+			}
+			created = body
+			_ = json.NewEncoder(w).Encode(body)
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/indexer/9":
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c := newProwlarrClient(srv.URL, "k", srv.Client())
+	createdSpec, err := c.CreateIndexer(context.Background(), &indexerv1.IndexerSpec{
+		Name: "Knaben", BaseUrl: "https://knaben.example/api", ApiKey: "secret", Enable: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if createdSpec.GetId() != 9 || createdSpec.GetApiKey() != "" || !createdSpec.GetEnable() {
+		t.Fatalf("%#v", createdSpec)
+	}
+	updated, err := c.UpdateIndexer(context.Background(), &indexerv1.IndexerSpec{Id: 9, Enable: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.GetEnable() {
+		t.Fatalf("expected disabled, %#v", updated)
+	}
+	if err := c.DeleteIndexer(context.Background(), 9); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCreateIndexerRequiresProwlarr(t *testing.T) {
+	m := NewModule(Config{GRPCAddr: ":0", BaseURL: "http://127.0.0.1:1/api", HTTP: http.DefaultClient, SkipVPNGate: true})
+	_, err := m.CreateIndexer(context.Background(), &indexerv1.CreateIndexerRequest{
+		Indexer: &indexerv1.IndexerSpec{Name: "x", BaseUrl: "https://example.test"},
+	})
+	if err == nil {
+		t.Fatal("expected FailedPrecondition")
+	}
+	st, ok := status.FromError(err)
+	if !ok || st.Code() != codes.FailedPrecondition {
+		t.Fatalf("code: %v err: %v", st, err)
 	}
 }
 

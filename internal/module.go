@@ -23,7 +23,7 @@ import (
 
 const (
 	defaultIndexerName = "Torznab"
-	moduleVersion      = "0.1.5"
+	moduleVersion      = "0.1.6"
 	healthProbeTimeout = 5 * time.Second
 )
 
@@ -401,4 +401,57 @@ func (m *Module) ListIndexers(ctx context.Context, _ *indexerv1.ListIndexersRequ
 			},
 		},
 	}, nil
+}
+
+func (m *Module) prowlarrClientOrErr() (*prowlarrClient, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if !m.prowlarr {
+		return nil, status.Error(codes.FailedPrecondition, "indexer add/edit requires Prowlarr (set PROWLARR_URL)")
+	}
+	if strings.TrimSpace(m.baseURL) == "" {
+		return nil, status.Error(codes.FailedPrecondition, "Prowlarr is not configured")
+	}
+	return newProwlarrClient(m.baseURL, m.apiKey, m.http), nil
+}
+
+func (m *Module) GetIndexer(ctx context.Context, req *indexerv1.GetIndexerRequest) (*indexerv1.IndexerSpec, error) {
+	pc, err := m.prowlarrClientOrErr()
+	if err != nil {
+		return nil, err
+	}
+	resource, err := pc.getIndexerResource(ctx, req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	out := specFromProwlarr(resource)
+	out.ApiKey = ""
+	return out, nil
+}
+
+func (m *Module) CreateIndexer(ctx context.Context, req *indexerv1.CreateIndexerRequest) (*indexerv1.IndexerSpec, error) {
+	pc, err := m.prowlarrClientOrErr()
+	if err != nil {
+		return nil, err
+	}
+	return pc.CreateIndexer(ctx, req.GetIndexer())
+}
+
+func (m *Module) UpdateIndexer(ctx context.Context, req *indexerv1.UpdateIndexerRequest) (*indexerv1.IndexerSpec, error) {
+	pc, err := m.prowlarrClientOrErr()
+	if err != nil {
+		return nil, err
+	}
+	return pc.UpdateIndexer(ctx, req.GetIndexer())
+}
+
+func (m *Module) DeleteIndexer(ctx context.Context, req *indexerv1.DeleteIndexerRequest) (*indexerv1.DeleteIndexerResponse, error) {
+	pc, err := m.prowlarrClientOrErr()
+	if err != nil {
+		return nil, err
+	}
+	if err := pc.DeleteIndexer(ctx, req.GetId()); err != nil {
+		return nil, err
+	}
+	return &indexerv1.DeleteIndexerResponse{}, nil
 }

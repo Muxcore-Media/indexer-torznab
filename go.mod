@@ -1,6 +1,6 @@
 module github.com/Muxcore-Media/indexer-torznab
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/Muxcore-Media/contracts-indexer v0.1.0
@@ -23,7 +23,11 @@ require (
 
 replace github.com/Muxcore-Media/contracts-indexer => ../contracts-indexer
 
+replace github.com/Muxcore-Media/contracts-media => ../contracts-media
+
 replace github.com/Muxcore-Media/core => ../core
+
+replace github.com/Muxcore-Media/core/pkg/tenant => ../core/pkg/tenant
 
 replace github.com/Muxcore-Media/core/pkg/contracts => ../core/pkg/contracts
 
