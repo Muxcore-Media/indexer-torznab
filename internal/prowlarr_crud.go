@@ -95,7 +95,7 @@ func (c *prowlarrClient) schemaByImplementation(ctx context.Context, impl string
 			return schema, nil
 		}
 	}
-	return nil, fmt.Errorf("Prowlarr has no %s indexer definition", want)
+	return nil, fmt.Errorf("prowlarr has no %s indexer definition", want)
 }
 
 func (c *prowlarrClient) getIndexerResource(ctx context.Context, id int32) (map[string]any, error) {
