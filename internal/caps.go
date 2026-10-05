@@ -101,7 +101,7 @@ func (c *torznabClient) FetchCapabilities(ctx context.Context) (*indexerv1.GetCa
 	}
 	req.Header.Set("Accept", "application/xml, text/xml, */*")
 
-	resp, err := c.http.Do(req)
+	resp, err := doGuarded(c.http, req)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func (c *prowlarrClient) ProbeHealth(ctx context.Context) error {
 	if c.apiKey != "" {
 		req.Header.Set("X-Api-Key", c.apiKey)
 	}
-	resp, err := c.http.Do(req)
+	resp, err := doGuarded(c.http, req)
 	if err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func (c *torznabClient) ProbeHealth(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := c.http.Do(req)
+	resp, err := doGuarded(c.http, req)
 	if err != nil {
 		return err
 	}

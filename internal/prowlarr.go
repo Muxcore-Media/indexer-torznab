@@ -63,7 +63,7 @@ func (c *prowlarrClient) ListIndexers(ctx context.Context) ([]prowlarrIndexer, e
 	if c.apiKey != "" {
 		req.Header.Set("X-Api-Key", c.apiKey)
 	}
-	resp, err := c.http.Do(req)
+	resp, err := doGuarded(c.http, req)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (c *prowlarrClient) Search(ctx context.Context, q torznabQuery) ([]torznabH
 		req.Header.Set("X-Api-Key", c.apiKey)
 	}
 
-	resp, err := c.http.Do(req)
+	resp, err := doGuarded(c.http, req)
 	if err != nil {
 		return nil, err
 	}

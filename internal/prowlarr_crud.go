@@ -65,7 +65,7 @@ func (c *prowlarrClient) doJSON(ctx context.Context, method, path string, body a
 	if c.apiKey != "" {
 		req.Header.Set("X-Api-Key", c.apiKey)
 	}
-	resp, err := c.http.Do(req)
+	resp, err := doGuarded(c.http, req)
 	if err != nil {
 		return nil, 0, err
 	}

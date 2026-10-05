@@ -112,7 +112,7 @@ func (c *torznabClient) Search(ctx context.Context, q torznabQuery) ([]torznabHi
 	}
 	req.Header.Set("Accept", "application/xml, text/xml, */*")
 
-	resp, err := c.http.Do(req)
+	resp, err := doGuarded(c.http, req)
 	if err != nil {
 		return nil, err
 	}

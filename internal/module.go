@@ -134,7 +134,7 @@ func NewModule(cfg Config) *Module {
 		}
 	}
 	if hc == nil {
-		hc = &http.Client{Timeout: cfg.Timeout}
+		hc = newGuardedClient(cfg.Timeout)
 	}
 
 	m := &Module{
