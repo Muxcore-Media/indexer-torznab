@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.5] - 2026-10-05
+
+### Changed
+- CI runs on GitHub-hosted runners from the umbrella template; retired-origin workflows removed.
+- Dependencies resolve from published GitHub tags (no filesystem `replace`); requires core v0.6.0.
+
 ## [0.1.6] — 2026-09-09
 
 ### Added
@@ -15,7 +21,7 @@
 - `Health` probes upstream (`t=caps` or Prowlarr `/api/v1/system/status`).
 - Music/book/audiobook search types and `year` query param.
 - HTTP 429 and Newznab `<error>` mapped to gRPC `ResourceExhausted`.
-- `make lint`, Forgejo golangci-lint CI, and Dockerfile (`EXPOSE 9486`).
+- `make lint`, golangci-lint CI, and Dockerfile (`EXPOSE 9486`).
 
 ### Fixed
 - Strip `apikey` (and equivalent) from result download/info URLs before cache or automation history.
