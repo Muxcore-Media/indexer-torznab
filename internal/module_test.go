@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	indexerv1 "github.com/Muxcore-Media/contracts-indexer/muxcore/indexer/v1"
+	modulesdk "github.com/Muxcore-Media/core/sdk/go/module"
+	manifest "github.com/Muxcore-Media/indexer-torznab"
 )
 
 func TestSearchUnconfiguredNoNetwork(t *testing.T) {
@@ -201,7 +203,7 @@ func TestModuleInfo(t *testing.T) {
 	if info.HTTPAddr != "" {
 		t.Errorf("HTTPAddr: %q (module has no HTTP listener)", info.HTTPAddr)
 	}
-	if info.Version != moduleVersion {
+	if info.Version != modulesdk.ManifestVersion(manifest.ManifestJSON) {
 		t.Errorf("version: %s", info.Version)
 	}
 	if len(info.Contracts) != 1 || info.Contracts[0].Version != "v1" {

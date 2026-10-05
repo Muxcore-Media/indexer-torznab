@@ -19,11 +19,12 @@ import (
 	indexerv1 "github.com/Muxcore-Media/contracts-indexer/muxcore/indexer/v1"
 	"github.com/Muxcore-Media/core/pkg/contracts"
 	"github.com/Muxcore-Media/core/sdk/go/client"
+	modulesdk "github.com/Muxcore-Media/core/sdk/go/module"
+	manifest "github.com/Muxcore-Media/indexer-torznab"
 )
 
 const (
 	defaultIndexerName = "Torznab"
-	moduleVersion      = "0.1.6"
 	healthProbeTimeout = 5 * time.Second
 )
 
@@ -189,7 +190,7 @@ func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
 		ID:           m.id,
 		Name:         "Torznab Indexer",
-		Version:      moduleVersion,
+		Version:      modulesdk.ManifestVersion(manifest.ManifestJSON),
 		Roles:        []string{"indexer"},
 		Description:  "Aggregating indexer via Torznab/Newznab HTTP API (Prowlarr, Jackett)",
 		Author:       "MuxCore",

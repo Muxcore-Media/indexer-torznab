@@ -1,10 +1,16 @@
 {
   "name": "Torznab Indexer",
   "description": "Aggregating indexer via Torznab/Newznab HTTP API (Prowlarr, Jackett, etc.).",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "author": "MuxCore",
-  "roles": ["indexer"],
-  "capabilities": ["indexer", "indexer.torznab", "indexer.newznab"],
+  "roles": [
+    "indexer"
+  ],
+  "capabilities": [
+    "indexer",
+    "indexer.torznab",
+    "indexer.newznab"
+  ],
   "contracts": [
     {
       "repo": "github.com/Muxcore-Media/contracts-indexer",
