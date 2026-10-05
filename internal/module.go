@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Muxcore-Media/core/sdk/go/module/meshtls"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -234,7 +236,12 @@ func (m *Module) Init(ctx context.Context) error {
 }
 
 func (m *Module) Start(ctx context.Context) error {
-	m.grpcSrv = grpc.NewServer()
+	srv, err := meshtls.NewServer()
+	if err != nil {
+		_ = m.lis.Close()
+		return fmt.Errorf("gRPC mesh TLS: %w", err)
+	}
+	m.grpcSrv = srv
 	indexerv1.RegisterIndexerServiceServer(m.grpcSrv, m)
 	go func() {
 		slog.Info("indexer-torznab gRPC started", "addr", m.grpcAddr)
